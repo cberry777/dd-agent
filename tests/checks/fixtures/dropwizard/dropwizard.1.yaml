@@ -7,7 +7,7 @@ init_config:
 
   metrictype_blacklist: tps, min, .tps15, .p75, .p98
 
-  service_tags: grp:ws, xx:yy
+  service_tags: grp:celia, xx:yy
 
   leave_package_names: True
 

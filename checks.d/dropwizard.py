@@ -16,19 +16,23 @@ EVENT_TYPE = SOURCE_TYPE_NAME = 'dropwizard'
 class DropwizardError(Exception):
     pass
 
-# A Note About CodaHale Counts
-# ----------------------------
-# The default form of Counters from CodaHale are monotonically increasing numbers
-# But, we can NOT use monotonic_count in the dd-agent -- because a  monotonic_count must ALWAYS increase (in DD)
-# And will be stored as Zero if a number less than the current total is submitted (in DD)
-# Thus, we would miss all initial numbers after a service restart -- which restarts the CodaHale Counters over at Zero
-#
-# Actually - per DataDog support --
-#  The counter is only 0 when *consecutive* values are not increasing.
-#  So the following value pattern: 0 ; 1000 ; 1200 ; 400 (restart) ; 600; 800​; 1200
-#  will result in the graph (as count): nothing yet; 1000 ; 200 ; 0 ; 200; 400
-#
-#  NOTE: this still produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
+'''
+DropwizardCheck
+
+
+A Note About CodaHale Counts
+----------------------------
+The default form of Counters from CodaHale are monotonically increasing numbers
+But, we can NOT use monotonic_count in the dd-agent -- because a  monotonic_count must, ingeneral, ALWAYS increase (in DD)
+And will be stored as Zero if a number less than the current total is submitted (in DD)
+Thus, we would miss initial numbers after a service restart -- which restarts the CodaHale Counters over at Zero
+Per DataDog support --
+ The counter is only 0 when *consecutive* values are not increasing.
+ So the following value pattern: 0 ; 1000 ; 1200 ; 400 (restart) ; 600; 800​; 1200
+ will result in the graph (as count): nothing yet; 1000 ; 200 ; 0 ; 200; 400
+
+ NOTE: this still produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
+'''
 
 class DropwizardCheck(AgentCheck):
     DEFAULT_METRIC_PREFIX = 'dropwizard'
@@ -209,7 +213,7 @@ class DropwizardCheck(AgentCheck):
          Timers that measure very rare events may contain samples that are so far back in time that they cause more
          confusion than anything else.  The classic example is an event that occurred once at startup and had a long
          out-of-SLA elapsed time because nothing was warm: the jvm would report that one measurement forever (until
-         restart) suggesting that the app is unhealthy and slow even though it's really not.  To work around this,
+         restart) suggesting that the app is unhealthy and slow, even though it's really not.  To work around this,
          omit histogram-based timer measurements from the metrics output when a particular timer hasn't received any
          recent events.
 
@@ -228,7 +232,7 @@ class DropwizardCheck(AgentCheck):
         return False
 
     # Note: see https://github.com/dropwizard/metrics/blob/dff1a69b3a0824ff445492777052ea0417b9c5cf/metrics-json/src/main/java/com/dropwizard/metrics/json/MetricsModule.java
-    #       for details on JSON format
+    #       for details on JSON formats
     METHOD_MAP = {u'counters' : process_counters,
                   u'gauges' : process_gauges,
                   u'histograms' : process_histograms,
@@ -237,7 +241,7 @@ class DropwizardCheck(AgentCheck):
 
     def _process_dropwizard_json(self, dropwizard_json, instance):
         ''' Main data-processing loop.
-        http data looks like this
+        http json data looks like this
         {
           "version": "3.0.0",
           "gauges": {},
@@ -301,7 +305,6 @@ class DropwizardCheck(AgentCheck):
 
         return self._cleanup_metric(metric)
 
-    # TODO ????
     def _cleanup_metric(self, metric):
         metric = metric.replace('..', '.')
         if metric.startswith('.'):
@@ -348,10 +351,6 @@ class DropwizardCheck(AgentCheck):
     def trace(self, fmt, *arg):
         if self.log_at_trace:
             self.log.debug(fmt % arg)
-
-    def trace0(self, fmt):
-        if self.log_at_trace:
-            self.log.debug(fmt)
 
 
 # ---------------------------
