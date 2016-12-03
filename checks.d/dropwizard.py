@@ -86,6 +86,66 @@ Per DataDog support --
  NOTE: this still produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
 '''
 
+# TODO -- add
+'''
+* If the metric name contains `.(x=y,a=b).`, then that field is extracted and tags are created (`a:b` and `x:y`)
+
+Again, let's look a real example. Assume that you've created the following metric inside your application; `ServletHandler.(ec=listings,sr=find).requests.count`
+Our CodaHale Check tag processor will look for any matching fields with; `.(key=value).`, and, if found, will extract that field, and use it to create DataDog tags.
+Thus, for our example, your metric will become; `foo.ServletHandler.requests.count` with the following tags applied; `{'ec:listings', 'sr:find'}`
+'''
+
+# ds:capo.routeTo.(svc=capo-homeaway-war,svcenv=production,svcver=0.1.32,svciid=0f60fee0)Count:4.0:COUNTER:capo.routeTo.(svc=capo-homeaway-war,svcenv=production,svcver=0.1.32,svciid=0f60fee0)Count
+
+class EncodedTagsProcessor(object):
+    # There must be at least one = sign within the ()
+    BETWEEN_PARANS_REGEX = '\.\((\S*=\S*)\)\.'
+    PATTERN = re.compile(BETWEEN_PARANS_REGEX)
+
+    def process_tags_from_metric(self, full_metric, log, tag_prefix=None):
+        self.trace(log, "full_metric: %s", full_metric)
+
+        metric = full_metric
+        tags = []
+        if (self._metric_is_not_empty(metric)):
+            match = self.PATTERN.search(full_metric)
+            if match:
+                self.trace(log, "EncodedTagsProcessor: MATCH: match %s", match.groups())
+                field = match.group(1)
+
+                tags = self._process_tags_field(field, log, tag_prefix)
+
+                # delete from the metric
+                metric = metric[0:match.start()] + "." + metric[match.end():]
+            else:
+                self.trace(log, "SKIPPING: (%s) no fields match pattern", full_metric)
+        else:
+            self.trace(log, "SKIPPING %s", full_metric)
+
+        self.trace(log, "metric %s, tags %s", metric, tags)
+        return metric, tags
+
+    def _metric_is_not_empty(self, metric):
+        return ((metric is not None) and (metric.strip()))
+
+    def _process_tags_field(self, field, log, tag_prefix):
+        tags = []
+        kvs = field.strip().split(',')
+        self.trace(log, "kvs: %s", kvs)
+
+        for kv in kvs:
+            kvsplit = kv.strip().split('=')
+            key = (tag_prefix + '_' + kvsplit[0]) if (tag_prefix is not None) else kvsplit[0]
+            tags.append(key + ":" + kvsplit[1])
+        self.trace(log, "tags: %s", tags)
+
+        return tags
+
+    def trace(self, log, fmt, *arg):
+        if log:
+            log.debug(fmt % arg)
+
+#################################################################
 class DropwizardCheck(AgentCheck):
     DEFAULT_METRIC_PREFIX = 'dropwizard'
 
@@ -118,6 +178,8 @@ class DropwizardCheck(AgentCheck):
         self.service_tags = self._clean_tags(init_config.get('service_tags', None))
         self.agent_tags = self._clean_tags(agentConfig.get('tags'))
         self.log.debug("agent_tags: %s service_tags %s" % (self.agent_tags, self.service_tags))
+
+        self.encoded_tags_processor = EncodedTagsProcessor()
 
     def check(self, instance):
         dropwizard_json = self._fetch_dropwizard_json(instance)
@@ -307,8 +369,8 @@ class DropwizardCheck(AgentCheck):
         appname = instance.get('appname', self.DEFAULT_METRIC_PREFIX)
 
         tags = self._clean_tags(instance.get('instance_tags', None))
-        tags = self.extend_with_addtl_tags(tags, self.service_tags)
-        tags = self.extend_with_addtl_tags(tags, self.agent_tags)
+        tags = self._extend_with_addtl_tags(tags, self.service_tags)
+        tags = self._extend_with_addtl_tags(tags, self.agent_tags)
 
         for key, section in dropwizard_json.iteritems():
             try:
@@ -326,6 +388,12 @@ class DropwizardCheck(AgentCheck):
         metric = self._process_metricname(metric)
         if metric is None:
             return
+
+        metric, addtl_tags = self._process_tags(metric, appname)
+        if metric is None:
+            return
+        if addtl_tags:
+            tags = self._extend_with_addtl_tags(tags, addtl_tags)
 
         # Because of how the DataDog UI (Infrastructure View) is setup -- the first "field" is always assumed to be the app's name
         #  So we accommodate that, by doing it explicitly
@@ -363,6 +431,21 @@ class DropwizardCheck(AgentCheck):
             metric = metric[1:]
         return metric
 
+    def _process_tags(self, metric, appname):
+        log = self.log if self.log_at_trace else None
+        addtl_tags = []
+
+        metric, addtl_tags1 = self.encoded_tags_processor.process_tags_from_metric(metric, log)
+        if metric is None:
+            return None, []
+        addtl_tags.extend(addtl_tags1)
+
+        self.trace(">> metric %s, addtl_tags: %s", metric, addtl_tags)
+        return metric, addtl_tags
+
+    def _get_tag_prefix(self, appname):
+        return appname.split('-')[0]
+
     # Python reads in the agent_tags as a list of chars. Go figure.
     def _clean_tags(self, tags_in):
         tags_out = []
@@ -382,7 +465,7 @@ class DropwizardCheck(AgentCheck):
             self.log.info("%%%%%% ADDING counter **[[ %s ]]** %s %s" % (metric, ival, tags))
         self.count(metric, ival, tags=tags)
 
-    def extend_with_addtl_tags(self, tags, addtl_tags):
+    def _extend_with_addtl_tags(self, tags, addtl_tags):
         if addtl_tags:
             for tag in addtl_tags:
                 tags.append(tag)
