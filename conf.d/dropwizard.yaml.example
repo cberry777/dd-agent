@@ -1,0 +1,20 @@
+instances:
+  - host: localhost
+    port: 8080
+    stats_url: /metrics
+
+    instance_tags: 'app:name'
+
+init_config:
+  debug: False
+  log_at_trace: False
+  log_each_metric: False
+
+  http_timeout: 0.25
+
+  metrictype_blacklist:  'tps', 'min', '.tps15', '.p75', '.p98'
+
+  service_tags: 'grp:ws', 'xx:yy'
+
+  leave_package_names: True
+
