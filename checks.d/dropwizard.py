@@ -30,7 +30,30 @@ DropwizardCheck reads the metrics JSON response, parses it, and creates the corr
 Everything is converted into a gauge, including counters. This is because of how CodaHale handles counters,
 plus ease of use in Datadog dashboards. (See below)
 
-A Note about "Zero values"
+The see /conf.d/dropwizard.yaml.example for information on all the accepted input options.
+
+About Metric Naming
+-----------------------
+DropwizardCheck does a bit of manipulation on the metric names (although you can turn this off);
+
+* Java package names are collapsed out of the metric name. I.e. `a.b.c.Class.method.mtype` becomes `Class.method.mtype` (where `mtype` is `max`,`min`, `mean`, etc)
+* The "appname" is prepended to the metric name. I.e. `Class.method.mtype` becomes `appname.Class.method.mtype`
+
+Because Dropwizard is really a framework for building webapps, most shops are likely run many different Dropwizard apps.
+Often even many on the same host.
+
+In DataDog, the first field of the metric is assumed to be the "application name".
+Most off-the-shelf DataDog checks will simply set that first field to be the "application type" (e.g. "cassandra" or "mongo")
+This works fine for centralized apps like DBs. But it doesn't work well for micro-services, where, in general,
+most users want to see only their webapp's metrics alone, and there is no upside to lumping them together.
+It especially doesn't work well in DataDog's Infrastructure View,
+where all webapps on the box would show up grouped into a single "dropwizard".
+
+So rather than roll all those metrics into a single "dropwizard" application -- it is a
+better idea to supply an "appname" per instance. This will prefix the "appname" as the first field of the metric,
+instead of "dropwizard". Which makes things in the DataDog UI much easier.
+
+About "Zero values"
 ---------------------------
 CodaHale will report all metrics in the underlying MetricRegistry -- even if they are zero or appeared once 30 days ago.
 This can lead to a lot of confusion.
@@ -45,11 +68,11 @@ recent events.
 A timer that receives a single event takes 15 minutes for the "one minute rate" to drop < 1e-7.  When
 more than one event is received it'll take a little longer than 15 minutes, but not too much longer.
 
-Similarly, we do not report zero metrics. There means that metric has never occured during the run,
-and there is little sense in reporting something that didn't happen.
+Similarly, we do not report zero metrics. Zero means that metric has never occurred during the run,
+and there is little sense in reporting something that didn't happen, over and over.
 Not to mention, we pay for every custom metric in DataDog, regardless if they are always zero.
 
-A Note About CodaHale Counts
+About CodaHale Counts
 ----------------------------
 The default form of Counters from CodaHale are monotonically increasing numbers
 But, we can NOT use monotonic_count in the dd-agent -- because a  monotonic_count must, ingeneral, ALWAYS increase (in DD)
