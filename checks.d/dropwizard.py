@@ -19,6 +19,35 @@ class DropwizardError(Exception):
 '''
 DropwizardCheck
 
+A dd-agent Check for the popular Java Dropwizard metrics. (see http://metrics.dropwizard.io/3.1.0/)
+Also know as CodaHale metrics, after it's originator.
+
+This check calls the standard dropwizard URL: http://localhost:8080/metrics
+Although all those fields are configurable, per instance (host, port, stats_url)
+This URL yields a metrics JSON response consisting of the state of the MetricRegistry at that time.
+
+DropwizardCheck reads the metrics JSON response, parses it, and creates the corresponding DataDog metrics.
+Everything is converted into a gauge, including counters. This is because of how CodaHale handles counters,
+plus ease of use in Datadog dashboards. (See below)
+
+A Note about "Zero values"
+---------------------------
+CodaHale will report all metrics in the underlying MetricRegistry -- even if they are zero or appeared once 30 days ago.
+This can lead to a lot of confusion.
+
+Timers that measure very rare events may contain samples that are so far back in time that they cause more
+confusion than anything else.  The classic example is an Error metric that occurred once at startup, due to, say, a long
+out-of-SLA elapsed time because nothing was warm -- the Counter would report that one measurement forever (until
+next restart) suggesting that the app is unhealthy or slow, even though it's really not.  To work around this,
+we omit histogram-based timer measurements from the metrics output when a particular timer hasn't received any
+recent events.
+
+A timer that receives a single event takes 15 minutes for the "one minute rate" to drop < 1e-7.  When
+more than one event is received it'll take a little longer than 15 minutes, but not too much longer.
+
+Similarly, we do not report zero metrics. There means that metric has never occured during the run,
+and there is little sense in reporting something that didn't happen.
+Not to mention, we pay for every custom metric in DataDog, regardless if they are always zero.
 
 A Note About CodaHale Counts
 ----------------------------
@@ -148,7 +177,7 @@ class DropwizardCheck(AgentCheck):
         }
         '''
         # Note -- are there any no 'units' in histogram JSON
-        self._process_metric_section(section_data, tags, 'HISTOGRAMS', [], appname)
+        self._process_reservoir_metric(section_data, tags, 'HISTOGRAMS', [], appname)
 
     def process_meters(self, section_data, tags, appname):
         '''
@@ -164,7 +193,7 @@ class DropwizardCheck(AgentCheck):
           },
         }
         '''
-        self._process_metric_section(section_data, tags, 'METERS', ['units'], appname)
+        self._process_reservoir_metric(section_data, tags, 'METERS', ['units'], appname)
 
     def process_timers(self, section_data, tags, appname):
         '''
@@ -189,9 +218,9 @@ class DropwizardCheck(AgentCheck):
               "rate_units": "calls/second"
             }
         '''
-        self._process_metric_section(section_data, tags, 'TIMERS', ['duration_units', 'rate_units'], appname)
+        self._process_reservoir_metric(section_data, tags, 'TIMERS', ['duration_units', 'rate_units'], appname)
 
-    def _process_metric_section(self, section_data, tags, section_name, types_to_skip, appname):
+    def _process_reservoir_metric(self, section_data, tags, section_name, types_to_skip, appname):
         self.trace("SECTION: %s: %s", section_name, section_data)
         for base_metric_name, metric_data in section_data.iteritems():
             # skip metrics
