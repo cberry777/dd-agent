@@ -36,8 +36,10 @@ About Metric Naming
 -----------------------
 DropwizardCheck does a bit of manipulation on the metric names (although you can turn this off);
 
-* Java package names are collapsed out of the metric name. I.e. `a.b.c.Class.method.mtype` becomes `Class.method.mtype` (where `mtype` is `max`,`min`, `mean`, etc)
-* The "appname" is prepended to the metric name. I.e. `Class.method.mtype` becomes `appname.Class.method.mtype`
+* Java package names are collapsed out of the metric name.
+  I.e. `a.b.c.Class.method.mtype` becomes `Class.method.mtype` (where `mtype` is `max`,`min`, `mean`, etc)
+* The "appname" is prepended to the metric name.
+  I.e. `Class.method.mtype` becomes `appname.Class.method.mtype`
 
 Because Dropwizard is really a framework for building webapps, most shops are likely run many different Dropwizard apps.
 Often even many on the same host.
@@ -52,6 +54,18 @@ where all webapps on the box would show up grouped into a single "dropwizard".
 So rather than roll all those metrics into a single "dropwizard" application -- it is a
 better idea to supply an "appname" per instance. This will prefix the "appname" as the first field of the metric,
 instead of "dropwizard". Which makes things in the DataDog UI much easier.
+
+About Metric Tagging
+---------------------------
+You can supply metric tags at all three levels of the configuration; agent_config, init_config, and instance.
+
+In addition, DropwizardCheck can also do a bit of magic metric tagging for you.
+
+If the metric name contains a field like this; .(x=y,a=b). , then that field is extracted and tags are created (`a:b` and `x:y`).
+
+Let's look at a real example. Assume that you've created the following metric inside your application; `com.x.y.ServletHandler.(ec=listings,sr=find).requests.count`
+DropwizardCheck will look for any matching fields with; `.(key=value).`, and, if found, will extract that field, and use it to create DataDog tags.
+Thus, for our example, your metric will become; `appname.ServletHandler.requests.count` with the following tags applied; `{'ec:listings', 'sr:find'}`
 
 About "Zero values"
 ---------------------------
@@ -85,17 +99,6 @@ Per DataDog support --
 
  NOTE: this still produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
 '''
-
-# TODO -- add
-'''
-* If the metric name contains `.(x=y,a=b).`, then that field is extracted and tags are created (`a:b` and `x:y`)
-
-Again, let's look a real example. Assume that you've created the following metric inside your application; `ServletHandler.(ec=listings,sr=find).requests.count`
-Our CodaHale Check tag processor will look for any matching fields with; `.(key=value).`, and, if found, will extract that field, and use it to create DataDog tags.
-Thus, for our example, your metric will become; `foo.ServletHandler.requests.count` with the following tags applied; `{'ec:listings', 'sr:find'}`
-'''
-
-# ds:capo.routeTo.(svc=capo-homeaway-war,svcenv=production,svcver=0.1.32,svciid=0f60fee0)Count:4.0:COUNTER:capo.routeTo.(svc=capo-homeaway-war,svcenv=production,svcver=0.1.32,svciid=0f60fee0)Count
 
 class EncodedTagsProcessor(object):
     # There must be at least one = sign within the ()
@@ -147,13 +150,16 @@ class EncodedTagsProcessor(object):
 
 #################################################################
 class DropwizardCheck(AgentCheck):
+    # All metrics will be prefixed with this field. Unless an "appname" is forun in the instance config
     DEFAULT_METRIC_PREFIX = 'dropwizard'
 
     # Defaults to "http://localhost:8080/metrics"
+    # MAy be overriden in the instance config
     DEFAULT_HOST = 'localhost'
     DEFAULT_PORT = 8080
     DEFAULT_STATS_URL = "/metrics"
 
+    # metrics with these suffixes will be ignored
     DEFAULT_METRIC_TYPE_BLACKLIST = ['.tps15', '.p75', '.p98']
 
     # Timeout to call http (in seconds)
@@ -414,6 +420,11 @@ class DropwizardCheck(AgentCheck):
     def _process_metricname(self, metric):
         if metric is None:
             return None
+
+        # we pass thru all JVM metrics as is (except change the name to match our convention)
+        if metric.startswith('jvm'):
+            metric = metric.replace('jvm', 'Jvm')
+            return metric
 
         # Remove the java package name up front
         if not self.leave_package_names:
