@@ -88,7 +88,7 @@ class TestCheckDropwizard(AgentCheckTest):
         ## log.debug("json: %s" % data)
         return data
 
-    def XXXtest_check_basics(self):
+    def test_check_basics(self):
         tests_log.debug("RUNNING test_check_no_comments")
         self.data_type = 1
         self.run_check(MOCK_CONFIG, agent_config=self.agentConfig, mocks=self._get_mocks(), force_reload=True)
