@@ -12,7 +12,8 @@ init_config:
   leave_package_names: True
 
 instances:
-  - host: api-inquiries-v2-ustst1-03.wvrgroup.internal
+  - appname: chris
+    host: api-inquiries-v2-ustst1-03.wvrgroup.internal
     port: 8080
     stats_url: /private/metrics
 

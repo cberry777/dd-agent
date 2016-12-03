@@ -31,15 +31,17 @@ class DropwizardError(Exception):
 #  NOTE: this still produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
 
 class DropwizardCheck(AgentCheck):
-    DEFAULT_METRIC_TYPE_BLACKLIST = ['.tps15', '.p75', '.p98']
-
-    # Timeout to call http (in seconds)
-    DEFAULT_TIMEOUT = 0.25
+    DEFAULT_METRIC_PREFIX = 'dropwizard'
 
     # Defaults to "http://localhost:8080/metrics"
     DEFAULT_HOST = 'localhost'
     DEFAULT_PORT = 8080
     DEFAULT_STATS_URL = "/metrics"
+
+    DEFAULT_METRIC_TYPE_BLACKLIST = ['.tps15', '.p75', '.p98']
+
+    # Timeout to call http (in seconds)
+    DEFAULT_TIMEOUT = 0.25
 
     def __init__(self, name, init_config, agentConfig, instances=None):
         AgentCheck.__init__(self, name, init_config, agentConfig, instances)
@@ -61,13 +63,13 @@ class DropwizardCheck(AgentCheck):
         self.agent_tags = self._clean_tags(agentConfig.get('tags'))
         self.log.debug("agent_tags: %s service_tags %s" % (self.agent_tags, self.service_tags))
 
-    # TODO -- read appname from instance -- prefix metric
     def check(self, instance):
         dropwizard_json = self._fetch_dropwizard_json(instance)
         if dropwizard_json:
             self._process_dropwizard_json(dropwizard_json, instance)
 
     def _fetch_dropwizard_json(self, instance):
+        url = 'undefined'
         try:
             host = instance.get('host', self.DEFAULT_HOST)
             port = instance.get('port', self.DEFAULT_PORT)
@@ -82,9 +84,9 @@ class DropwizardCheck(AgentCheck):
             return resp.json()
 
         except Exception as e:  # Log and move on....
-            raise DropwizardError("%s Could not fetch: for %s" % (repr(e), instance))
+            raise DropwizardError("%s Could not fetch: for %s (%s)" % (repr(e), url, instance))
 
-    def process_counters(self, section_data, tags):
+    def process_counters(self, section_data, tags, appname):
         '''
           "counters": {
             "io.dropwizard.jetty.MutableServletContextHandler.active-dispatches": {
@@ -103,9 +105,9 @@ class DropwizardCheck(AgentCheck):
 
             metric = base_metric_name + '.count'
             mtags = copy.deepcopy(tags)
-            self._process_metric(metric, metric_data['count'], mtags)
+            self._process_metric(appname, metric, metric_data['count'], mtags)
 
-    def process_gauges(self, section_data, tags):
+    def process_gauges(self, section_data, tags, appname):
         '''
           "gauges": {
             "io.dropwizard.jetty.MutableServletContextHandler.percent-4xx-15m": {
@@ -134,17 +136,17 @@ class DropwizardCheck(AgentCheck):
             metric = base_metric_name
             mtags = copy.deepcopy(tags)
 
-            self._process_metric(metric, value, mtags)
+            self._process_metric(appname, metric, value, mtags)
 
-    def process_histograms(self, section_data, tags):
+    def process_histograms(self, section_data, tags, appname):
         '''
           "histograms": {},
         }
         '''
         # Note -- are there any no 'units' in histogram JSON
-        self._process_metric_section(section_data, tags, 'HISTOGRAMS', [])
+        self._process_metric_section(section_data, tags, 'HISTOGRAMS', [], appname)
 
-    def process_meters(self, section_data, tags):
+    def process_meters(self, section_data, tags, appname):
         '''
           "meters": {
             "ch.qos.logback.core.Appender.all": {
@@ -158,9 +160,9 @@ class DropwizardCheck(AgentCheck):
           },
         }
         '''
-        self._process_metric_section(section_data, tags, 'METERS', ['units'])
+        self._process_metric_section(section_data, tags, 'METERS', ['units'], appname)
 
-    def process_timers(self, section_data, tags):
+    def process_timers(self, section_data, tags, appname):
         '''
           "timers": {
             "com.foo.web.InquiriesResource.findByEmail": {
@@ -183,9 +185,9 @@ class DropwizardCheck(AgentCheck):
               "rate_units": "calls/second"
             }
         '''
-        self._process_metric_section(section_data, tags, 'TIMERS', ['duration_units', 'rate_units'])
+        self._process_metric_section(section_data, tags, 'TIMERS', ['duration_units', 'rate_units'], appname)
 
-    def _process_metric_section(self, section_data, tags, section_name, types_to_skip):
+    def _process_metric_section(self, section_data, tags, section_name, types_to_skip, appname):
         self.trace("SECTION: %s: %s", section_name, section_data)
         for base_metric_name, metric_data in section_data.iteritems():
             # skip metrics
@@ -200,7 +202,7 @@ class DropwizardCheck(AgentCheck):
 
                 metric = base_metric_name + '.' + metric_type
                 mtags = copy.deepcopy(tags)
-                self._process_metric(metric, value, mtags)
+                self._process_metric(appname, metric, value, mtags)
 
     def _skips_reservoir(self, metric_data, base_metric_name):
         '''
@@ -246,7 +248,8 @@ class DropwizardCheck(AgentCheck):
         }
         '''
 
-        # TODO
+        appname = instance.get('appname', self.DEFAULT_METRIC_PREFIX)
+
         tags = self._clean_tags(instance.get('instance_tags', None))
         tags = self.extend_with_addtl_tags(tags, self.service_tags)
         tags = self.extend_with_addtl_tags(tags, self.agent_tags)
@@ -254,12 +257,12 @@ class DropwizardCheck(AgentCheck):
         for key, section in dropwizard_json.iteritems():
             try:
                 if key in self.METHOD_MAP:
-                    self.METHOD_MAP[key](self, section, tags)
+                    self.METHOD_MAP[key](self, section, tags, appname)
             except:
                 # Log and move on....
                 self.log.exception("Could not process line. For instance: %s" % (instance))
 
-    def _process_metric(self, metric, value, tags):
+    def _process_metric(self, appname, metric, value, tags):
         if self._skips_metric(metric):
             self.log.debug("SKIPPING Metric (blacklisted type) : %s" % metric)
             return
@@ -267,6 +270,10 @@ class DropwizardCheck(AgentCheck):
         metric = self._process_metricname(metric)
         if metric is None:
             return
+
+        # Because of how the DataDog UI (Infrastructure View) is setup -- the first "field" is always assumed to be the app's name
+        #  So we accommodate that, by doing it explicitly
+        metric = appname + "." + metric
 
         self._process_gauge(metric, value, tags)
 
