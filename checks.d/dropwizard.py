@@ -247,13 +247,14 @@ class DropwizardCheck(AgentCheck):
         '''
 
         # TODO
-        tags = self.service_tags
-        all_tags = self.extend_with_agent_tags(tags)
+        tags = self._clean_tags(instance.get('instance_tags', None))
+        tags = self.extend_with_addtl_tags(tags, self.service_tags)
+        tags = self.extend_with_addtl_tags(tags, self.agent_tags)
 
         for key, section in dropwizard_json.iteritems():
             try:
                 if key in self.METHOD_MAP:
-                    self.METHOD_MAP[key](self, section, all_tags)
+                    self.METHOD_MAP[key](self, section, tags)
             except:
                 # Log and move on....
                 self.log.exception("Could not process line. For instance: %s" % (instance))
@@ -319,9 +320,9 @@ class DropwizardCheck(AgentCheck):
             self.log.info("%%%%%% ADDING counter **[[ %s ]]** %s %s" % (metric, ival, tags))
         self.count(metric, ival, tags=tags)
 
-    def extend_with_agent_tags(self, tags):
-        if self.agent_tags:
-            for tag in self.agent_tags:
+    def extend_with_addtl_tags(self, tags, addtl_tags):
+        if addtl_tags:
+            for tag in addtl_tags:
                 tags.append(tag)
         self.trace("global_tags: %s", tags)
         return tags
