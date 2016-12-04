@@ -9,10 +9,8 @@ import socket
 
 # project
 from utils.cloud_metadata import EC2, GCE
-# TODO >>>>> CWB >>>>
-#from utils.dockerutil import DockerUtil
-#from utils.kubernetes import KubeUtil
-# TODO <<<< CWB <<<<
+from utils.dockerutil import DockerUtil
+from utils.kubernetes import KubeUtil
 from utils.platform import Platform
 from utils.subprocess_output import get_subprocess_output
 

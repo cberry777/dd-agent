@@ -84,11 +84,8 @@ class Platform(object):
 
     @staticmethod
     def is_ecs_instance():
-        # TODO >>>>> CWB >>>>
-        # from utils.dockerutil import DockerUtil
-        # return DockerUtil().is_ecs()
-        return False
-        # TODO <<<< CWB <<<<
+        from utils.dockerutil import DockerUtil
+        return DockerUtil().is_ecs()
 
     @staticmethod
     def is_containerized():

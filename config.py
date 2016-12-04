@@ -26,11 +26,9 @@ from urlparse import urlparse
 from util import check_yaml
 from utils.platform import Platform, get_os
 from utils.proxy import get_proxy
-# TODO >>>>> CWB >>>>
-# from utils.service_discovery.config import extract_agent_config
-# from utils.service_discovery.config_stores import CONFIG_FROM_FILE, TRACE_CONFIG
-# from utils.service_discovery.sd_backend import get_sd_backend, AUTO_CONFIG_DIR, SD_BACKENDS
-# TODO <<<< CWB <<<<
+from utils.service_discovery.config import extract_agent_config
+from utils.service_discovery.config_stores import CONFIG_FROM_FILE, TRACE_CONFIG
+from utils.service_discovery.sd_backend import get_sd_backend, AUTO_CONFIG_DIR, SD_BACKENDS
 from utils.subprocess_output import (
     get_subprocess_output,
     SubprocessOutputEmptyError,
