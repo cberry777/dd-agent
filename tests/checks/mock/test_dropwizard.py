@@ -168,4 +168,3 @@ class TestCheckDropwizard(AgentCheckTest):
         assertTag('svcenv:production', tags)
         assertTag('svcver:0.1.32', tags)
         assertTag('svciid:0f60fee0', tags)
-

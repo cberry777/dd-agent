@@ -32,6 +32,8 @@ plus ease of use in Datadog dashboards. (See below)
 
 The see /conf.d/dropwizard.yaml.example for information on all the accepted input options.
 
+Questions or Comments: chriswberry at gmail.com
+
 About Metric Naming
 -----------------------
 DropwizardCheck does a bit of manipulation on the metric names (although you can turn this off);
