@@ -167,7 +167,7 @@ class DropwizardCheck(AgentCheck):
 
     def __init__(self, name, init_config, agentConfig, instances=None):
         AgentCheck.__init__(self, name, init_config, agentConfig, instances)
-        self.log.debug("agentConfig: %s\ninit_config: %s" % (agentConfig, init_config))
+        self.log.debug("DropwizardCheck::agentConfig: %s\ninit_config: %s" % (agentConfig, init_config))
 
         self.log_each_metric = self.init_config.get('log_each_metric', False)
         self.log_at_trace = self.init_config.get('log_at_trace', False)
@@ -191,6 +191,9 @@ class DropwizardCheck(AgentCheck):
         dropwizard_json = self._fetch_dropwizard_json(instance)
         if dropwizard_json:
             self._process_dropwizard_json(dropwizard_json, instance)
+
+    def get_encoded_tags_processor(self):
+        return self.encoded_tags_processor
 
     def _fetch_dropwizard_json(self, instance):
         url = 'undefined'

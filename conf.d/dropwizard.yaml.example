@@ -1,12 +1,14 @@
 init_config:
-  # turn on debug logging
+  # Turn on debug logging
   #debug: False
-  # debug logging on steriods
+
+  # Debug logging on steriods
   #log_at_trace: False
-  # sometimes you want to see teh metrics you'll send
+
+  # Sometimes you want to see teh metrics you'll send
   #log_each_metric: False
 
-  # timeout for the call to /metrics
+  # Timeout for the call to /metrics
   #http_timeout: 0.25
 
   # By default, we do not process the following: .tps15, .p75, .p98

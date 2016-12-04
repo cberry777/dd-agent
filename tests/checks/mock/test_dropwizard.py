@@ -22,7 +22,7 @@ MOCK_CONFIG = {
                    }]
 }
 
-LEVEL = logging.DEBUG
+LEVEL = logging.INFO
 
 def setup_logging(logger, level=LEVEL):
     logger.setLevel(level)
@@ -42,6 +42,10 @@ def assertNoMetric(test, metric_name, value=None, tags=None, count=None, at_leas
         tests_log.debug("Expected Exception occured %s" % ee)
         pass
 
+def assertTag(tag, tags):
+    if tag not in tags:
+        raise Exception("tag: %s is not in (%s)" % (tag, tags))
+
 # -------------------------------------------------------------
 # PYTHONPATH=. nosetests ./tests/checks/mock/test_dropwizard.py
 # -------------------------------------------------------------
@@ -59,6 +63,9 @@ class TestCheckDropwizard(AgentCheckTest):
         }
 
         self.data_type = 1
+
+    def setUp(self):
+        self.log = tests_log
 
     def mock_fetch_dropwizard_json(self, instance):
         tests_log.debug("Fetching data from: %s" % instance)
@@ -135,3 +142,30 @@ class TestCheckDropwizard(AgentCheckTest):
         assertNoMetric(self, 'my-app.MutableServletContextHandler.4xx-responses.m1_rate')
         assertNoMetric(self, 'my-app.CloudNodeProducer.update.count')
         assertNoMetric(self, 'my-app.MutableServletContextHandler.options-requests.max')
+
+
+    def test_encodedtags_basics(self):
+        self.load_check(MOCK_CONFIG, self.agentConfig)
+        ff = self.check.get_encoded_tags_processor()
+
+        full_metric = 'myapp.routeTo.(svc=otherapp,svcenv=production,svcver=0.1.32,svciid=0f60fee0).count'
+        metric, tags = ff.process_tags_from_metric(full_metric, self.log, tag_prefix='myapp')
+        self.assertEquals('myapp.routeTo.count', metric)
+        assertTag('myapp_svc:otherapp', tags)
+        assertTag('myapp_svcenv:production', tags)
+        assertTag('myapp_svcver:0.1.32', tags)
+        assertTag('myapp_svciid:0f60fee0', tags)
+
+
+    def test_encodedtags_no_tag_prefix(self):
+        self.load_check(MOCK_CONFIG, self.agentConfig)
+        ff = self.check.get_encoded_tags_processor()
+
+        full_metric = 'myapp.routeTo.(svc=otherapp,svcenv=production,svcver=0.1.32,svciid=0f60fee0).count'
+        metric, tags = ff.process_tags_from_metric(full_metric, self.log)
+        self.assertEquals('myapp.routeTo.count', metric)
+        assertTag('svc:otherapp', tags)
+        assertTag('svcenv:production', tags)
+        assertTag('svcver:0.1.32', tags)
+        assertTag('svciid:0f60fee0', tags)
+
