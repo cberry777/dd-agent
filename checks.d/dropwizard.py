@@ -19,92 +19,110 @@ class DropwizardError(Exception):
 '''
 DropwizardCheck
 
-DropwizardCheck is a DataDog Check for Java Dropwizard metrics,
-also commonly known as CodaHale metrics, after it's originator.
-(see http://metrics.dropwizard.io/3.1.0/)
+DropwizardCheck is a DataDog Check for Java Dropwizard metrics (a.k.a CodaHale metrics, after it's originator).
+(For further details, see http://metrics.dropwizard.io/3.1.0/)
 
-This check calls the standard dropwizard URL: http://localhost:8080/metrics
-Of course, all those fields are configurable, per instance (host, port, stats_url)
-The Dropwizard URL yields a metrics JSON response consisting of the state of it's MetricRegistry at that time.
+DropwizardCheck calls the standard Dropwizard stats URL: http://localhost:8080/metrics
+(Of course, all those fields are configurable per instance (host, port, stats_url))
+The Dropwizard URL yields up a JSON response consisting of the all metrics in it's MetricRegistry at that time.
+DropwizardCheck reads this response, parses it, and creates the corresponding DataDog metrics.
 
-DropwizardCheck reads this metrics JSON response, parses it, and creates the corresponding DataDog metrics.
+NOTE: In DropwizardCheck, all metrics are converted into a gauges, including Counters.
+This is because of how CodaHale handles counters. And for ease of use in Datadog dashboards. (See below)
 
-NOTE: everything is converted into a gauge, including counters. This is because of how CodaHale handles counters,
-And for ease of use in Datadog dashboards. (See below)
+See /conf.d/dropwizard.yaml.example for documentation on all accepted input options.
+Further implementation details can be found below...
 
-See /conf.d/dropwizard.yaml.example for doc on all of the accepted input options.
-
-Questions or Comments: chriswberry at gmail.com
+Questions or Comments? chriswberry at gmail.com
 
 About Metric Naming
 -----------------------
-DropwizardCheck does a bit of manipulation on the metric names (although you can turn this off);
+DropwizardCheck does a bit of manipulation on the metric names (although you can turn these off);
 
 * Java package names are collapsed out of the metric name.
   I.e. `a.b.c.Class.method.mtype` becomes `Class.method.mtype` (where `mtype` is `max`,`min`, `mean`, etc)
-* The "appname" is prepended to the metric name.
+* The "appname" is prepended to the metric name. (more on this below)
   I.e. `Class.method.mtype` becomes `appname.Class.method.mtype`
 * If the metric name contains a field like this; .(x=y,a=b). , then that field is extracted and tags are created (`a:b` and `x:y`).
+  See "About Metric Tagging" for further details
 
 Because Dropwizard is really a framework for building webapps, most shops are likely run many different Dropwizard apps.
 Often even many on the same host.
 
-In DataDog, the first field of the metric is assumed to be the "application name".
-Most off-the-shelf DataDog checks will simply set that first field to be the "application type" (e.g. "cassandra" or "mongo")
-This works fine for centralized apps like DBs. But it doesn't work well for micro-services, where, in general,
+And because, in DataDog, the first field of the metric is assumed to be the "application name".
+Where most off-the-shelf DataDog checks will simply set that first field to be the "application type" (e.g. "cassandra" or "mongo")
+And while this scheme works fine for centralized apps like DBs.
+It doesn't work well for micro-services frameworks like Dropwizard, where, in general,
 most users want to see only their webapp's metrics alone, and there is no upside to lumping them together.
-It especially doesn't work well in DataDog's Infrastructure View,
-where all webapps on the box would show up grouped into a single "dropwizard".
+This is especially true for DataDog's Infrastructure View,
+where all webapps on the host would show up grouped into a single "dropwizard application".
 
-So rather than roll all those metrics into a single "dropwizard" application -- it is a
+Thus, rather than roll all those metrics into a single "dropwizard" grouping -- it is a
 better idea to supply an "appname" per instance. This will prefix the "appname" as the first field of the metric,
 instead of "dropwizard". Which makes things in the DataDog UI much easier.
 
 About Metric Tagging
 ---------------------------
-You can supply metric tags at all three levels of the configuration; agent_config, init_config, and instance.
+DropwizardCheck allows you to supply metric tags at all three levels of the configuration; agent_config, init_config, and instance.
 
 In addition, as alluded to above, DropwizardCheck can also do a bit of magic metric tagging for you.
+Which is quite useful because Tags are essential to the user experience in the DataDog UI.
 
-If the metric name contains a field like this; .(x=y,a=b). , then that field is extracted and tags are created (`a:b` and `x:y`).
+A metric name consists of dot-delimited fields. And if the metric name contains a field like this; ".(x=y,a=b).",
+then that field is extracted and corresponding "key:value" tags are created (i.e. "a:b" and "x:y").
 
-Let's look at a real example. Assume that you've created the following metric inside your application; `com.x.y.ServletHandler.(ec=listings,sr=find).requests.count`
-DropwizardCheck will look for any matching fields with; `.(key=value).`, and, if found, will extract that field, and use it to create DataDog tags.
-Thus, for our example, your metric will become; `appname.ServletHandler.requests.count` with the following tags applied; `{'ec:listings', 'sr:find'}`
+Let's look at a real example. Assume that you've created the following metric inside your application;
+"com.x.y.ServletHandler.(type=berrys,method=find).requests.count"
+DropwizardCheck will look for any matching fields with; ".(key=value).", and, if found, will extract that field,
+and use it to create DataDog tags. Thus, for our example, your metric will become; "appname.ServletHandler.requests.count"
+with the following tags applied; ["type:berrys", "method:find"]
 
 About "Zero values"
 ---------------------------
-CodaHale will report all metrics in the underlying MetricRegistry -- even if they are zero or appeared once 30 days ago.
-This can lead to a lot of confusion.
+Dropwizard will report all metrics in the underlying MetricRegistry.
+Even if they are zero or they appeared only once or twice a long time ago.
+This can lead to a great deal of confusion.
 
-Timers that measure very rare events may contain samples that are so far back in time that they cause more
-confusion than anything else.  The classic example is an Error metric that occurred once at startup, due to, say, a long
-out-of-SLA elapsed time because nothing was warm -- the Counter would report that one measurement forever (until
-next restart) suggesting that the app is unhealthy or slow, even though it's really not.  To work around this,
-we omit histogram-based timer measurements from the metrics output when a particular timer hasn't received any
-recent events.
+Dropwizard Timers that measure very rare events may contain samples that are so far back in time that they cause more
+confusion than anything else. The classic example is an Error metric that occurred once at startup, due to, say, an
+out-of-SLA elapsed time because nothing was warm . In Dropwizard, the Counter for this metric
+would report that one measurement forever (until next restart) suggesting that the app is unhealthy or slow,
+even though it's really not.
 
-A timer that receives a single event takes 15 minutes for the "one minute rate" to drop < 1e-7.  When
+To work around this, DropwizardCheck omits histogram-based Timer measurements from the metrics output
+when a particular timer hasn't received any recent events.
+
+NOTE: a Timer that receives a single event takes 15 minutes for the "one minute rate" to drop < 1e-7.  When
 more than one event is received it'll take a little longer than 15 minutes, but not too much longer.
 
-Similarly, we do not report zero metrics. Zero means that metric has never occurred during the run,
-and there is little sense in reporting something that didn't happen, over and over.
-Not to mention, we pay for every custom metric in DataDog, regardless if they are always zero.
+Similarly, DropwizardCheck does not report zero metrics.
+Zero means that metric has never occurred during the run, and there is little sense in reporting something
+that didn't happen, over and over. Not to mention, we pay for every custom metric in DataDog,
+regardless if they are always zero.
 
-About CodaHale Counts
+About DropWizard Counts
 ----------------------------
-The default form of Counters from CodaHale are monotonically increasing numbers
-But, we can NOT use monotonic_count in the dd-agent -- because a  monotonic_count must, ingeneral, ALWAYS increase (in DD)
-And will be stored as Zero if a number less than the current total is submitted (in DD)
-Thus, we would miss initial numbers after a service restart -- which restarts the CodaHale Counters over at Zero
-Per DataDog support --
- The counter is only 0 when *consecutive* values are not increasing.
- So the following value pattern: 0 ; 1000 ; 1200 ; 400 (restart) ; 600; 800​; 1200
- will result in the graph (as count): nothing yet; 1000 ; 200 ; 0 ; 200; 400
+The default form of Counters from DropWizard are monotonically increasing numbers.
 
- NOTE: this still produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
+But, DropwizardCheck can NOT use the "monotonic_count" in DataDog -- because a monotonic_count in DataDog must,
+in general, ALWAYS increase. If DropwizardCheck were to submit a monotonic_count value that is less than the current total,
+then DataDog would store this as Zero! (Actually, per DataDog support; The monotonic_count is only Zero
+when *consecutive* values are not increasing.)
+
+So, for example: given the following monotonic_count value pattern: [0 ; 1000 ; 1200 ; 400; (restart); 600; 800​; 1200]
+Will result in the graph: [nothing yet; 1000 ; 200 ; 0 ; 200; 400]
+Which produces erroneous results -- since the 400 is missed -- and the overall total will be wrong
+
+Thus, DropwizardCheck would miss initial numbers for every service restart, because at restart the Dropwizard Counters
+start over at Zero. For this reason we use a gauge for Dropwizard Counters
 '''
 
+#################################################################
+'''
+EncodedTagsProcessor : Processes any fields in the metric name, such that,
+if the metric name contains a field like this;  .(x=y,a=b).
+then that field is extracted, and the corresponding key:value tags are created (i.e. a:b and x:y).
+'''
 class EncodedTagsProcessor(object):
     # There must be at least one = sign within the ()
     BETWEEN_PARANS_REGEX = '\.\((\S*=\S*)\)\.'
@@ -154,18 +172,23 @@ class EncodedTagsProcessor(object):
             log.debug(fmt % arg)
 
 #################################################################
+'''
+DropwizardCheck is a DataDog Check for Java Dropwizard metrics
+'''
 class DropwizardCheck(AgentCheck):
-    # All metrics will be prefixed with this field. Unless an "appname" is forun in the instance config
+    # All metrics will be prefixed with this field. Unless an "appname" is found in the instance config
     DEFAULT_METRIC_PREFIX = 'dropwizard'
 
     # Defaults to "http://localhost:8080/metrics"
-    # MAy be overriden in the instance config
+    #  May be overriden in the instance config
     DEFAULT_HOST = 'localhost'
     DEFAULT_PORT = 8080
     DEFAULT_STATS_URL = "/metrics"
 
-    # metrics with these suffixes will be ignored
+    # Metrics with these suffixes will be ignored
     DEFAULT_METRIC_TYPE_BLACKLIST = ['.tps15', '.p75', '.p98']
+    # To specify no metric blacklist
+    NO_METRIC_BLACKLIST = 'none'
 
     # Timeout to call http (in seconds)
     DEFAULT_TIMEOUT = 0.25
@@ -174,18 +197,27 @@ class DropwizardCheck(AgentCheck):
         AgentCheck.__init__(self, name, init_config, agentConfig, instances)
         self.log.debug("DropwizardCheck::agentConfig: %s\ninit_config: %s" % (agentConfig, init_config))
 
+        # Debug options
         self.log_each_metric = self.init_config.get('log_each_metric', False)
         self.log_at_trace = self.init_config.get('log_at_trace', False)
         debug = self.init_config.get('debug', False)
         if debug:
             self.log.setLevel(logging.DEBUG)
 
+        # Pattern to remove Java package names
         self.starts_with_cap_pattern = re.compile("\.([A-Z][\w]*)\.")
 
-        self.http_timeout = self.init_config.get('http_timeout', self.DEFAULT_TIMEOUT)
-        self.metric_type_blacklist = init_config.get('metrictype_blacklist', self.DEFAULT_METRIC_TYPE_BLACKLIST)
+        # Specify, if you do not want package names removed
         self.leave_package_names = _is_affirmative(init_config.get('leave_package_names', False))
 
+        self.http_timeout = self.init_config.get('http_timeout', self.DEFAULT_TIMEOUT)
+
+        # List of metric suffixes to skip
+        self.metric_type_blacklist = init_config.get('metrictype_blacklist', self.DEFAULT_METRIC_TYPE_BLACKLIST)
+        if self.metric_type_blacklist is self.NO_METRIC_BLACKLIST:
+            self.metric_type_blacklist = []
+
+        # Global tags
         self.service_tags = self._clean_tags(init_config.get('service_tags', None))
         self.agent_tags = self._clean_tags(agentConfig.get('tags'))
         self.log.debug("agent_tags: %s service_tags %s" % (self.agent_tags, self.service_tags))
@@ -219,7 +251,7 @@ class DropwizardCheck(AgentCheck):
             raise DropwizardError("%s Could not fetch: for %s (%s)" % (repr(e), url, instance))
 
     def process_counters(self, section_data, tags, appname):
-        '''
+        ''' Format:
           "counters": {
             "io.dropwizard.jetty.MutableServletContextHandler.active-dispatches": {
               "count": 0
@@ -240,7 +272,7 @@ class DropwizardCheck(AgentCheck):
             self._process_metric(appname, metric, metric_data['count'], mtags)
 
     def process_gauges(self, section_data, tags, appname):
-        '''
+        ''' Format:
           "gauges": {
             "io.dropwizard.jetty.MutableServletContextHandler.percent-4xx-15m": {
               "value": 0.019564512218014994
@@ -271,7 +303,7 @@ class DropwizardCheck(AgentCheck):
             self._process_metric(appname, metric, value, mtags)
 
     def process_histograms(self, section_data, tags, appname):
-        '''
+        ''' Format:
           "histograms": {},
         }
         '''
@@ -279,7 +311,7 @@ class DropwizardCheck(AgentCheck):
         self._process_reservoir_metric(section_data, tags, 'HISTOGRAMS', [], appname)
 
     def process_meters(self, section_data, tags, appname):
-        '''
+        ''' Format:
           "meters": {
             "ch.qos.logback.core.Appender.all": {
               "count": 130,
@@ -295,7 +327,7 @@ class DropwizardCheck(AgentCheck):
         self._process_reservoir_metric(section_data, tags, 'METERS', ['units'], appname)
 
     def process_timers(self, section_data, tags, appname):
-        '''
+        '''  Format:
           "timers": {
             "com.foo.web.InquiriesResource.findByEmail": {
               "count": 8,
@@ -369,7 +401,7 @@ class DropwizardCheck(AgentCheck):
 
     def _process_dropwizard_json(self, dropwizard_json, instance):
         ''' Main data-processing loop.
-        http json data looks like this
+        Overall Dropwizard JSON looks like this
         {
           "version": "3.0.0",
           "gauges": {},
@@ -379,7 +411,6 @@ class DropwizardCheck(AgentCheck):
           "timers": {}
         }
         '''
-
         appname = instance.get('appname', self.DEFAULT_METRIC_PREFIX)
 
         tags = self._clean_tags(instance.get('instance_tags', None))
@@ -411,6 +442,7 @@ class DropwizardCheck(AgentCheck):
 
         # Because of how the DataDog UI (Infrastructure View) is setup -- the first "field" is always assumed to be the app's name
         #  So we accommodate that, by doing it explicitly
+        #  If you don't provide an appname, "dropwizard" will be used
         metric = appname + "." + metric
 
         self._process_gauge(metric, value, tags)
@@ -429,7 +461,9 @@ class DropwizardCheck(AgentCheck):
         if metric is None:
             return None
 
-        # we pass thru all JVM metrics as is (except change the name to match our convention)
+        # We pass thru all JVM metrics as is (except change the name to match our convention)
+        # NOTE: changing the name first (here) has the desired side-effect
+        #       of keeping the pseudo package name supplied by Dropwizard for JVM metrics
         if metric.startswith('jvm'):
             metric = metric.replace('jvm', 'Jvm')
             return metric
@@ -459,13 +493,13 @@ class DropwizardCheck(AgentCheck):
             return None, []
         addtl_tags.extend(addtl_tags1)
 
-        self.trace(">> metric %s, addtl_tags: %s", metric, addtl_tags)
+        self.trace(">> appname %s metric %s, addtl_tags: %s", appname, metric, addtl_tags)
         return metric, addtl_tags
 
     def _get_tag_prefix(self, appname):
         return appname.split('-')[0]
 
-    # Python reads in the agent_tags as a list of chars. Go figure.
+    # Python reads in the agent_tags as a list of chars. Take evasive action...
     def _clean_tags(self, tags_in):
         tags_out = []
         if tags_in:
