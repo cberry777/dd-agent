@@ -11,11 +11,6 @@ import re
 from checks import AgentCheck
 from config import _is_affirmative
 
-EVENT_TYPE = SOURCE_TYPE_NAME = 'dropwizard'
-
-class DropwizardError(Exception):
-    pass
-
 '''
 DropwizardCheck
 
@@ -172,6 +167,11 @@ class EncodedTagsProcessor(object):
             log.debug(fmt % arg)
 
 #################################################################
+class DropwizardError(Exception):
+    pass
+
+EVENT_TYPE = SOURCE_TYPE_NAME = 'dropwizard'
+
 '''
 DropwizardCheck is a DataDog Check for Java Dropwizard metrics
 '''
