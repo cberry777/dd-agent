@@ -19,18 +19,20 @@ class DropwizardError(Exception):
 '''
 DropwizardCheck
 
-A dd-agent Check for the popular Java Dropwizard metrics. (see http://metrics.dropwizard.io/3.1.0/)
-Also know as CodaHale metrics, after it's originator.
+DropwizardCheck is a DataDog Check for Java Dropwizard metrics,
+also commonly known as CodaHale metrics, after it's originator.
+(see http://metrics.dropwizard.io/3.1.0/)
 
 This check calls the standard dropwizard URL: http://localhost:8080/metrics
-Although all those fields are configurable, per instance (host, port, stats_url)
-This URL yields a metrics JSON response consisting of the state of the MetricRegistry at that time.
+Of course, all those fields are configurable, per instance (host, port, stats_url)
+The Dropwizard URL yields a metrics JSON response consisting of the state of it's MetricRegistry at that time.
 
-DropwizardCheck reads the metrics JSON response, parses it, and creates the corresponding DataDog metrics.
-Everything is converted into a gauge, including counters. This is because of how CodaHale handles counters,
-plus ease of use in Datadog dashboards. (See below)
+DropwizardCheck reads this metrics JSON response, parses it, and creates the corresponding DataDog metrics.
 
-The see /conf.d/dropwizard.yaml.example for information on all the accepted input options.
+NOTE: everything is converted into a gauge, including counters. This is because of how CodaHale handles counters,
+And for ease of use in Datadog dashboards. (See below)
+
+See /conf.d/dropwizard.yaml.example for doc on all of the accepted input options.
 
 Questions or Comments: chriswberry at gmail.com
 
@@ -42,6 +44,7 @@ DropwizardCheck does a bit of manipulation on the metric names (although you can
   I.e. `a.b.c.Class.method.mtype` becomes `Class.method.mtype` (where `mtype` is `max`,`min`, `mean`, etc)
 * The "appname" is prepended to the metric name.
   I.e. `Class.method.mtype` becomes `appname.Class.method.mtype`
+* If the metric name contains a field like this; .(x=y,a=b). , then that field is extracted and tags are created (`a:b` and `x:y`).
 
 Because Dropwizard is really a framework for building webapps, most shops are likely run many different Dropwizard apps.
 Often even many on the same host.
@@ -61,7 +64,7 @@ About Metric Tagging
 ---------------------------
 You can supply metric tags at all three levels of the configuration; agent_config, init_config, and instance.
 
-In addition, DropwizardCheck can also do a bit of magic metric tagging for you.
+In addition, as alluded to above, DropwizardCheck can also do a bit of magic metric tagging for you.
 
 If the metric name contains a field like this; .(x=y,a=b). , then that field is extracted and tags are created (`a:b` and `x:y`).
 
