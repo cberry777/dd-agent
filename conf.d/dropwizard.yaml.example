@@ -15,9 +15,9 @@ init_config:
   # Timeout for the call to /metrics
   #http_timeout: 0.25
 
-  # By default, we do not process the following suffixes: ".tps15, .p75, .p98"
+  # By default, we do not process the following suffixes: ".p75, .p98"
   # You can modify that list, or you can disable the behavior altogether by specifying; "none"
-  #metrictype_blacklist: tps, min, .tps15, .p75, .p98
+  #metrictype_blacklist: min, .p75, .p98
 
   # Tags applied to all of these Dropwizard services
   #service_tags: grp:webtier, xx:yy

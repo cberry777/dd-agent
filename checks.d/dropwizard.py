@@ -186,7 +186,7 @@ class DropwizardCheck(AgentCheck):
     DEFAULT_STATS_URL = "/metrics"
 
     # Metrics with these suffixes will be ignored
-    DEFAULT_METRIC_TYPE_BLACKLIST = ['.tps15', '.p75', '.p98']
+    DEFAULT_METRIC_TYPE_BLACKLIST = ['.p75', '.p98']
     # To specify no metric blacklist
     NO_METRIC_BLACKLIST = 'none'
 
@@ -352,6 +352,9 @@ class DropwizardCheck(AgentCheck):
         self._process_reservoir_metric(section_data, tags, 'TIMERS', ['duration_units', 'rate_units'], appname)
 
     def _process_reservoir_metric(self, section_data, tags, section_name, types_to_skip, appname):
+        '''
+        histograms, meters, and timers are all reservoir-based metrics
+        '''
         self.trace("SECTION: %s: %s", section_name, section_data)
         for base_metric_name, metric_data in section_data.iteritems():
             # skip metrics

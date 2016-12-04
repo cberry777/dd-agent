@@ -5,7 +5,7 @@ init_config:
 
   http_timeout: 0.25
 
-  metrictype_blacklist: tps, min, .tps15, .p75, .p98
+  metrictype_blacklist: min, .p75, .p98
 
   service_tags: grp:celia, xx:yy
 

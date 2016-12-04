@@ -18,7 +18,8 @@ MOCK_CONFIG = {
     },
     'instances': [{'host': 'stooges.com',
                 'appname': 'my-app',
-                'port': 8181
+                'port': 8181,
+                'instance_tags' : 'appgrp:mady, aa:bb'
                    }]
 }
 
@@ -62,17 +63,12 @@ class TestCheckDropwizard(AgentCheckTest):
             'hostname': 'dogstar.stooges.com'
         }
 
-        self.data_type = 1
-
     def setUp(self):
         self.log = tests_log
 
     def mock_fetch_dropwizard_json(self, instance):
         tests_log.debug("Fetching data from: %s" % instance)
-        if (self.data_type == 1):
-            return self.fetch_json('./tests/checks/fixtures/dropwizard/codahale.metrics.json')
-        else:
-            return []
+        return self.fetch_json('./tests/checks/fixtures/dropwizard/codahale.metrics.json')
 
     def _get_mocks(self):
         return {
@@ -97,30 +93,10 @@ class TestCheckDropwizard(AgentCheckTest):
 
     def test_check_basics(self):
         tests_log.debug("RUNNING test_check_no_comments")
-        self.data_type = 1
         self.run_check(MOCK_CONFIG, agent_config=self.agentConfig, mocks=self._get_mocks(), force_reload=True)
         self.print_current_state()
-        self.validate_metrics()
 
-    def test_check_leave_package_names(self):
-        self.data_type = 1
-
-        my_config = copy.deepcopy(MOCK_CONFIG)
-        my_config['init_config']['leave_package_names'] = True
-
-        self.run_check(my_config, agent_config=self.agentConfig, mocks=self._get_mocks(), force_reload=True)
-        #self.print_current_state()
-
-        tags = ['grp:celia', 'xx:yy', 'foo:bar']
-
-        self.assertMetric('my-app.Jvm.memory.pools.Metaspace.committed', value=33685504, tags=tags)
-        self.assertMetric('my-app.ch.qos.logback.core.Appender.all.count', value=14006, tags=tags)
-        self.assertMetric('my-app.Jvm.memory.pools.PS-Survivor-Space.committed', value=524288, tags=tags)
-        self.assertMetric('my-app.io.dropwizard.jetty.MutableServletContextHandler.3xx-responses.m1_rate', value=0.03833532101498379, tags=tags)
-        self.assertMetric('my-app.io.dropwizard.jetty.MutableServletContextHandler.head-requests.max', value=0.202, tags=tags)
-
-    def validate_metrics(self):
-        tags = ['grp:celia', 'xx:yy', 'foo:bar']
+        tags = ['appgrp:mady', 'aa:bb', 'grp:celia', 'xx:yy', 'foo:bar']
 
         my_tags = copy.deepcopy(tags).extend([u'svc:someapp3', u'svcenv:production', u'svcver:0.0.33-snapshot', u'svciid:c352ae63'])
         self.assertMetric('my-app.routeTo.count', value=32932, tags=my_tags)
@@ -143,6 +119,48 @@ class TestCheckDropwizard(AgentCheckTest):
         assertNoMetric(self, 'my-app.CloudNodeProducer.update.count')
         assertNoMetric(self, 'my-app.MutableServletContextHandler.options-requests.max')
 
+        # assert the metric blacklist are missing
+        assertNoMetric(self, 'my-app.routeTo.p98')
+        assertNoMetric(self, 'my-app.routeTo.p75')
+
+    def test_empty_lists(self):
+        my_config = copy.deepcopy(MOCK_CONFIG)
+        my_config['init_config']['service_tags'] = None
+        my_config['init_config']['metrictype_blacklist'] = 'none'
+        my_config['instances'][0]['instance_tags'] = None
+
+        self.run_check(my_config, agent_config=self.agentConfig, mocks=self._get_mocks(), force_reload=True)
+        self.print_current_state()
+
+        tags = ['foo:bar']
+
+        self.assertMetric('my-app.Jvm.memory.pools.Metaspace.committed', value=33685504, tags=tags)
+        self.assertMetric('my-app.Appender.all.count', value=14006, tags=tags)
+        self.assertMetric('my-app.Jvm.memory.pools.PS-Survivor-Space.committed', value=524288, tags=tags)
+        self.assertMetric('my-app.MutableServletContextHandler.3xx-responses.m1_rate', value=0.03833532101498379, tags=tags)
+        self.assertMetric('my-app.MutableServletContextHandler.head-requests.max', value=0.202, tags=tags)
+
+        my_tags = copy.deepcopy(tags).extend([u'svc:someapp3', u'svcenv:production', u'svcver:0.0.33-snapshot', u'svciid:c352ae63'])
+        self.assertMetric('my-app.routeTo.count', value=32932, tags=my_tags)
+
+        my_tags = copy.deepcopy(tags).extend([u'svc:someapp', u'svcenv:production', u'svcver:0.56', u'svciid:7820d473'])
+        self.assertMetric('my-app.routeTo.p98', value=0.002503182, tags=my_tags)
+        self.assertMetric('my-app.routeTo.p75', value=0.020185942000000002, tags=my_tags)
+
+    def test_check_leave_package_names(self):
+        my_config = copy.deepcopy(MOCK_CONFIG)
+        my_config['init_config']['leave_package_names'] = True
+
+        self.run_check(my_config, agent_config=self.agentConfig, mocks=self._get_mocks(), force_reload=True)
+        #self.print_current_state()
+
+        tags = ['appgrp:mady', 'aa:bb', 'grp:celia', 'xx:yy', 'foo:bar']
+
+        self.assertMetric('my-app.Jvm.memory.pools.Metaspace.committed', value=33685504, tags=tags)
+        self.assertMetric('my-app.ch.qos.logback.core.Appender.all.count', value=14006, tags=tags)
+        self.assertMetric('my-app.Jvm.memory.pools.PS-Survivor-Space.committed', value=524288, tags=tags)
+        self.assertMetric('my-app.io.dropwizard.jetty.MutableServletContextHandler.3xx-responses.m1_rate', value=0.03833532101498379, tags=tags)
+        self.assertMetric('my-app.io.dropwizard.jetty.MutableServletContextHandler.head-requests.max', value=0.202, tags=tags)
 
     def test_encodedtags_basics(self):
         self.load_check(MOCK_CONFIG, self.agentConfig)
