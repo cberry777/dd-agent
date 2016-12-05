@@ -549,6 +549,9 @@ class DropwizardCheck(AgentCheck):
 # ---------------------------
 # PYTHONPATH=. python checks.d/dropwizard.py
 #
+# NOTE: running standalone is currently broken.
+#       See https://github.com/DataDog/dd-agent/issues/3057
+#
 def process_check(check):
     time_start = time.clock()
     check.check(instance)

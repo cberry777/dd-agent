@@ -13,7 +13,7 @@ init_config:
 
 instances:
   - appname: chris
-    host: api-inquiries-v2-ustst1-03.wvrgroup.internal
+    host: myhost.stooges.com
     port: 8080
     stats_url: /private/metrics
 
